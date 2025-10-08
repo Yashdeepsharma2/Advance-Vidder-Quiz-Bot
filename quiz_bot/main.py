@@ -1,6 +1,29 @@
 import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+import os
+from dotenv import load_dotenv
+
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ConversationHandler,
+    MessageHandler,
+    PollAnswerHandler,
+    filters,
+)
+
+from quiz_bot.persistence import load_data
+from quiz_bot.handlers.info_handlers import start, help_command, features
+from quiz_bot.handlers.quiz_handler import (
+    create_quiz_start, get_title, get_questions, done, cancel,
+    my_quizzes, del_quiz, start_quiz, stop_quiz, receive_poll_answer
+)
+from quiz_bot.handlers.ai_handler import (
+    generate_quiz_start, get_topic as get_ai_topic,
+    get_num_questions as get_ai_num_questions, get_difficulty_and_generate, cancel_ai,
+    GET_TOPIC, GET_NUM_QUESTIONS, GET_DIFFICULTY
+)
+from quiz_bot.handlers.team_handler import create_team, join_team, view_teams, team_quiz
+from quiz_bot.handlers.placeholder_handlers import *
 
 # Enable logging
 logging.basicConfig(
@@ -8,141 +31,97 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a message when the command /start is issued."""
-    user = update.effective_user
-    await update.message.reply_html(
-        rf"Hi {user.mention_html()}! Welcome to the Viddertech Advance Quiz Bot. I'm here to help you create and manage quizzes. Use /help to see what I can do.",
-    )
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a message when the command /help is issued."""
-    help_text = """
-*Viddertech Advance Quiz Bot Help*
-
-Here are the available commands:
-/start - Check if bot is alive
-/help - Get this help message
-/features - View bot features
-/login - Login with TestBook
-/telelogin - Login to extract polls
-/logout - Logout from server
-/post - Broadcast a message
-/stopcast - Stop a broadcast
-/lang - Select language for TestBook quizzes
-/create - Start creating a quiz
-/edit - Edit your quiz
-/quiz - Clone a quiz from another bot
-/done - Finish creating a quiz
-/cancel - Stop creating a quiz
-/stopedit - Stop editing a quiz
-/myquizzes - Get a list of your quizzes
-/assignment - Create an assignment
-/submit - Submit homework/assignment
-/pause - Pause an ongoing quiz
-/resume - Resume a paused quiz
-/stop - Stop an ongoing quiz
-/fast - Speed up quiz in a group
-/slow - Slow down quiz in a group
-/normal - Reset quiz speed to normal
-/addfilter - Add words to your filter list
-/removefilter - Remove words from your filter list
-/listfilters - Show all your filter words
-/clearfilters - Remove all your filter words
-/remove - Add words to delete set
-/clearlist - Clear the remove words list
-/add - Add a user to your paid quiz
-/rem - Remove a user from your paid quiz
-/remall - Remove all paid users
-/ban - Ban a creator
-/extract - Create a txt file from polls
-/del - Delete a quiz by ID
-/stats - Get bot statistics
-/info - Get info about the creator
-
-Powered by Viddertech.
-    """
-    await update.message.reply_text(help_text)
-
-
-async def features(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a message when the command /features is issued."""
-    features_text = """
-*📢 Features Showcase of Viddertech Advance Quiz Bot! 🚀*
-
-🔹 Create questions from text just by providing a ✅ mark to the right options.
-🔹 Marathon Quiz Mode: Create unlimited questions for a never-ending challenge.
-🔹 Convert Polls to Quizzes: Simply forward polls (e.g., from @quizbot), and unnecessary elements will be auto-removed!
-🔹 Smart Filtering: Remove unwanted words (e.g., usernames, links) from forwarded polls.
-🔹 Skip, Pause & Resume ongoing quizzes anytime.
-🔹 Bulk Question Support via ChatGPT output.
-🔹 Negative Marking for accurate scoring.
-🔹 Edit Existing Quizzes with ease like shuffle title editing timer adding removing questions and many more.
-🔹 Quiz Analytics: View engagement, tracking how many users completed the quiz.
-🔹 Inline Query Support: Share quizzes instantly via quiz ID.
-🔹 Free & Paid Quizzes: Restrict access to selected users/groups—perfect for paid quiz series!
-🔹 Assignment Management: Track student responses via bot submissions.
-🔹 View Creator Info using the quiz ID.
-🔹 Generate Beautiful HTML Reports with score counters, plus light/dark theme support.
-🔹 Manage Paid Quizzes: Add/remove users & groups individually or in bulk.
-🔹 Video Tutorials: Find detailed guides in the Help section.
-🔹 Auto-Send Group Results: No need to copy-paste manually—send all results in one click!
-🔹 Create Sectional Quiz: You can create different sections with different timing 🥳.
-🔹 Slow/Fast: Slow or fast ongoing quiz.
-🔹 OCR Update - Now extract text from PDFs or Photos
-🔹 Comparison of Result with accuracy, percentile and percentage
-🔹 Create Questions from TXT.
-🔹 Advance Mechanism with 99.99% uptime.
-🔹 Automated link and username removal from Poll's description and questions.
-🔹 Auto txt quiz creation from Wikipedia Britannia bbc news and 20+ articles sites.
-
-*Latest update 🆕*
-
-🔹 Create Questions from Testbook App by test link.
-🔹 Auto clone from official quizbot.
-🔹 Create from polls/already finishrd quizzes in channels and all try /extract.
-🔹 Create from Drishti IAS web Quiz try /quiztxt.
-
-*🚀 Upcoming Features:*
-
-🔸 Advance Engagement saving + later on perspective.
-🔸 More optimizations for a smoother experience.
-🔸 Suprising Updates...
-
-*📊 Live Tracker & Analysis:*
-
-✅ Topper Comparisons
-✅ Detailed Quiz Performance Analytics
-
-Powered by Viddertech.
-    """
-    await update.message.reply_text(features_text)
-
-
-import os
-from dotenv import load_dotenv
-
+# Load environment variables from .env file
 load_dotenv()
 
 def main() -> None:
     """Start the bot."""
-    # Get the token from environment variables
     token = os.getenv("TELEGRAM_TOKEN")
     if not token:
-        logger.error("TELEGRAM_TOKEN environment variable not set.")
+        logger.error("TELEGRAM_TOKEN environment variable not set. Please create a .env file and add it.")
         return
 
-    # Create the Application and pass it your bot's token.
-    application = Application.builder().token(token).build()
+    # Load persistent data
+    bot_data = load_data()
 
-    # on different commands - answer in Telegram
+    # Create the Application and pass it your bot's token.
+    application = Application.builder().token(token).bot_data(bot_data).build()
+
+    # --- Register Handlers ---
+
+    # Informational Commands
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("features", features))
 
+    # Quiz Creation Conversation
+    create_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("create", create_quiz_start)],
+        states={
+            0: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_title)],
+            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_questions)],
+        },
+        fallbacks=[CommandHandler("done", done), CommandHandler("cancel", cancel)],
+    )
+    application.add_handler(create_conv_handler)
+
+    # AI Quiz Generation Conversation
+    ai_quiz_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("generate", generate_quiz_start)],
+        states={
+            GET_TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_ai_topic)],
+            GET_NUM_QUESTIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_ai_num_questions)],
+            GET_DIFFICULTY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_difficulty_and_generate)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_ai)],
+    )
+    application.add_handler(ai_quiz_conv_handler)
+
+    # Core Quiz Commands
+    application.add_handler(CommandHandler("myquizzes", my_quizzes))
+    application.add_handler(CommandHandler("del", del_quiz))
+    application.add_handler(CommandHandler("quiz", start_quiz))
+    application.add_handler(CommandHandler("stop", stop_quiz))
+
+    # Team Commands
+    application.add_handler(CommandHandler("team_create", create_team))
+    application.add_handler(CommandHandler("team_join", join_team))
+    application.add_handler(CommandHandler("teams", view_teams))
+    application.add_handler(CommandHandler("team_quiz", team_quiz))
+
+    # Poll Answer Handler (for quizzes)
+    application.add_handler(PollAnswerHandler(receive_poll_answer))
+
+    # Placeholder Commands
+    application.add_handler(CommandHandler("login", login))
+    application.add_handler(CommandHandler("telelogin", telelogin))
+    application.add_handler(CommandHandler("logout", logout))
+    application.add_handler(CommandHandler("post", post))
+    application.add_handler(CommandHandler("stopcast", stopcast))
+    application.add_handler(CommandHandler("lang", lang))
+    application.add_handler(CommandHandler("assignment", assignment))
+    application.add_handler(CommandHandler("submit", submit))
+    application.add_handler(CommandHandler("pause", pause))
+    application.add_handler(CommandHandler("resume", resume))
+    application.add_handler(CommandHandler("fast", fast))
+    application.add_handler(CommandHandler("slow", slow))
+    application.add_handler(CommandHandler("normal", normal))
+    application.add_handler(CommandHandler("addfilter", addfilter))
+    application.add_handler(CommandHandler("removefilter", removefilter))
+    application.add_handler(CommandHandler("listfilters", listfilters))
+    application.add_handler(CommandHandler("clearfilters", clearfilters))
+    application.add_handler(CommandHandler("remove", remove))
+    application.add_handler(CommandHandler("clearlist", clearlist))
+    application.add_handler(CommandHandler("add", add))
+    application.add_handler(CommandHandler("rem", rem))
+    application.add_handler(CommandHandler("remall", remall))
+    application.add_handler(CommandHandler("ban", ban))
+    application.add_handler(CommandHandler("extract", extract))
+    application.add_handler(CommandHandler("info", info))
+    application.add_handler(CommandHandler("my_stats", my_stats))
+
     # Run the bot until the user presses Ctrl-C
+    logger.info("Bot is starting...")
     application.run_polling()
 
 
