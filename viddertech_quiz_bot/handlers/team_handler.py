@@ -1,6 +1,7 @@
+# Powered by Viddertech
 from telegram import Update
 from telegram.ext import ContextTypes
-from quiz_bot.handlers.quiz_handler import send_next_question
+from viddertech_quiz_bot.handlers.quiz_handler import send_next_question
 
 async def create_team(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Creates a new team in the chat."""

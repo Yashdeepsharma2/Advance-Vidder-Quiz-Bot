@@ -1,3 +1,4 @@
+# Powered by Viddertech
 import logging
 import json
 import os
@@ -5,7 +6,7 @@ import uuid
 import openai
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
-from quiz_bot.persistence import save_quizzes
+from viddertech_quiz_bot.persistence import save_quizzes
 
 logger = logging.getLogger(__name__)
 

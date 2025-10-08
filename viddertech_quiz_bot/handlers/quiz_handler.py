@@ -1,8 +1,9 @@
+# Powered by Viddertech
 import logging
 import uuid
 from telegram import Update, Poll
 from telegram.ext import ContextTypes, ConversationHandler
-from quiz_bot.persistence import save_quizzes, save_user_stats
+from viddertech_quiz_bot.persistence import save_quizzes, save_user_stats
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ async def del_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # --- Quiz Taking ---
 
-async def start_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def play_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Starts a quiz in the chat."""
     if 'current_quiz' in context.chat_data:
         await update.message.reply_text("A quiz is already in progress in this chat.")
@@ -164,9 +165,9 @@ async def start_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def send_next_question(chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends the next question in the quiz as a poll."""
+    """Sends the next question in the quiz as a poll, respecting speed controls."""
     quiz_session = context.chat_data.get('current_quiz')
-    if not quiz_session or not quiz_session.get('is_active', False):
+    if not quiz_session or not quiz_session.get('is_active', False) or quiz_session.get('is_paused', False):
         return
 
     question_index = quiz_session['current_question']
@@ -177,12 +178,16 @@ async def send_next_question(chat_id: int, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     question = quiz_data['questions'][question_index]
+    # Use the speed setting from the session, or default to 30 seconds
+    open_period = quiz_session.get('open_period', 30)
+
     message = await context.bot.send_poll(
         chat_id=chat_id,
         question=question['text'],
         options=question['options'],
         type=Poll.QUIZ,
         correct_option_id=question['correct'],
+        open_period=open_period,
         is_anonymous=False,
     )
     context.chat_data['current_poll_id'] = message.poll.id
