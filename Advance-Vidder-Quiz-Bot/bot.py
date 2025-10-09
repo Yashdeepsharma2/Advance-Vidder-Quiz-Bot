@@ -4,13 +4,15 @@ import logging
 import config
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, ConversationHandler,
-    MessageHandler, filters, PollAnswerHandler
+    MessageHandler, filters, PollAnswerHandler, InlineQueryHandler
 )
 
 from database.database import init_db
 from handlers import (
     basic_commands, quiz_commands, callbacks, poll_handler, auth_commands,
-    quiz_control, assignment_commands, filter_commands, admin_commands, user_management
+    quiz_control, assignment_commands, filter_commands, admin_commands,
+    user_management, extract_commands, sectional_creator, ocr_commands, web_quiz_commands,
+    bulk_creator, reporting_commands, inline_query_handler, external_integration_handlers
 )
 
 def main() -> None:
@@ -34,50 +36,16 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.ALL, user_management.universal_user_handler), group=-1)
 
     # --- Conversation Handlers ---
-    telelogin_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("telelogin", auth_commands.telelogin_start)],
-        states={
-            auth_commands.PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, auth_commands.get_phone_and_connect)],
-            auth_commands.CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, auth_commands.get_code_and_login)],
-            auth_commands.PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, auth_commands.get_password_and_login)],
-        },
-        fallbacks=[CommandHandler("cancel", auth_commands.telelogin_cancel)],
-    )
-    creation_conv_handler = ConversationHandler(
-        entry_points=[
-            CommandHandler("create", quiz_commands.create_quiz_start),
-            CallbackQueryHandler(quiz_commands.create_quiz_start, pattern="^create_quiz_start$")
-        ],
-        states={
-            quiz_commands.GET_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, quiz_commands.get_quiz_title)],
-            quiz_commands.GET_QUESTIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, quiz_commands.get_quiz_question)],
-        },
-        fallbacks=[
-            CommandHandler("done", quiz_commands.creation_done),
-            CommandHandler("cancel", quiz_commands.creation_cancel)
-        ],
-    )
-    assignment_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("assignment", assignment_commands.create_assignment_start)],
-        states={
-            assignment_commands.GET_A_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, assignment_commands.get_assignment_title)],
-            assignment_commands.GET_A_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, assignment_commands.get_assignment_desc_and_save)],
-        },
-        fallbacks=[CommandHandler("cancel", assignment_commands.create_assignment_cancel)],
-    )
-    submit_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("submit", assignment_commands.submit_assignment_start)],
-        states={
-            assignment_commands.SUBMIT_A_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, assignment_commands.get_submission_assignment_id)],
-            assignment_commands.SUBMIT_A_WORK: [MessageHandler(filters.TEXT | filters.Document.ALL, assignment_commands.get_submission_work_and_save)],
-        },
-        fallbacks=[CommandHandler("cancel", assignment_commands.submit_assignment_cancel)],
-    )
-
-    application.add_handler(telelogin_conv_handler)
-    application.add_handler(creation_conv_handler)
-    application.add_handler(assignment_conv_handler)
-    application.add_handler(submit_conv_handler)
+    application.add_handler(auth_commands.telelogin_conv_handler)
+    application.add_handler(quiz_commands.creation_conv_handler)
+    application.add_handler(quiz_commands.edit_quiz_conv_handler)
+    application.add_handler(assignment_commands.assignment_conv_handler)
+    application.add_handler(assignment_commands.submit_conv_handler)
+    application.add_handler(extract_commands.extract_conv_handler)
+    application.add_handler(sectional_creator.sectional_creation_conv_handler)
+    application.add_handler(ocr_commands.ocr_conv_handler)
+    application.add_handler(web_quiz_commands.quiztxt_conv_handler)
+    application.add_handler(bulk_creator.bulk_creation_conv_handler)
 
     # --- Command Handlers ---
     # Basic Commands
@@ -86,6 +54,8 @@ def main() -> None:
     application.add_handler(CommandHandler("features", basic_commands.features_command))
     application.add_handler(CommandHandler("info", basic_commands.info_command))
     application.add_handler(CommandHandler("stats", basic_commands.stats_command))
+    application.add_handler(CommandHandler("leaderboard", basic_commands.leaderboard_command))
+    application.add_handler(CommandHandler("report", reporting_commands.report_command))
 
     # Auth & Cloning Commands
     application.add_handler(CommandHandler("quiz", auth_commands.clone_quiz_command))
@@ -122,9 +92,14 @@ def main() -> None:
     application.add_handler(CommandHandler("stopcast", admin_commands.stopcast_command))
     application.add_handler(CommandHandler("ban", admin_commands.ban_command))
 
+    # External Integration Placeholders
+    application.add_handler(CommandHandler("login", external_integration_handlers.login_command))
+    application.add_handler(CommandHandler("lang", external_integration_handlers.lang_command))
 
     # --- Other Handlers ---
+    application.add_handler(InlineQueryHandler(inline_query_handler.inline_query_handler))
     application.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
+    # CallbackQueryHandler must be last to act as a catch-all for button presses
     application.add_handler(CallbackQueryHandler(callbacks.handle_callback_query))
 
     # --- Start the Bot ---

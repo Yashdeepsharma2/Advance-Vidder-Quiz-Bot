@@ -34,14 +34,41 @@ class Quiz(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_paid = Column(Boolean, default=False)
 
+    # New fields for advanced quiz modes and settings
+    quiz_mode = Column(String, default='standard') # 'standard', 'marathon'
+    negative_marking = Column(Boolean, default=False)
+    negative_marks = Column(Float, default=0.25)
+    _sections = Column('sections', Text, nullable=True) # Store as JSON for sectional quizzes
+
+    @property
+    def sections(self):
+        return json.loads(self._sections) if self._sections else None
+
+    @sections.setter
+    def sections(self, value):
+        self._sections = json.dumps(value) if value else None
+
     creator = relationship("User", back_populates="quizzes")
     questions = relationship("Question", back_populates="quiz", cascade="all, delete-orphan")
     paid_users = relationship("PaidUser", back_populates="quiz", cascade="all, delete-orphan")
+    sections = relationship("Section", back_populates="quiz", cascade="all, delete-orphan")
+
+class Section(Base):
+    __tablename__ = 'sections'
+    id = Column(Integer, primary_key=True)
+    quiz_id = Column(String, ForeignKey('quizzes.id', ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    time_per_question = Column(Integer, default=30) # in seconds
+
+    quiz = relationship("Quiz", back_populates="sections")
+    questions = relationship("Question", back_populates="section", cascade="all, delete-orphan")
+
 
 class Question(Base):
     __tablename__ = 'questions'
     id = Column(Integer, primary_key=True, autoincrement=True)
     quiz_id = Column(String, ForeignKey('quizzes.id', ondelete="CASCADE"), nullable=False)
+    section_id = Column(Integer, ForeignKey('sections.id'), nullable=True) # Can be null for non-sectional quizzes
     text = Column(Text, nullable=False)
     _options = Column('options', Text, nullable=False) # Store as JSON string
     correct_option_index = Column(Integer, nullable=False)

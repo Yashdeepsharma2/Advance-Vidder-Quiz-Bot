@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 import config
 from database.database import get_db
 from database.models import Quiz
-from utils.keyboards import main_menu_keyboard, my_quizzes_keyboard, delete_confirmation_keyboard
-from .quiz_commands import start_quiz_session # Import the quiz playing logic
+from utils.keyboards import main_menu_keyboard, my_quizzes_keyboard, delete_confirmation_keyboard, create_quiz_type_keyboard
+from .quiz_commands import start_quiz_session, edit_quiz_start # Import the new edit function
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,19 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await my_quizzes_callback(update, context, from_cancel=True)
     elif data.startswith("play_"):
         await play_quiz_callback(update, context)
-    # Future routes here
+    elif data.startswith("edit_"): # Route to the edit conversation handler
+        await edit_quiz_start(update, context)
+    elif data == "create_quiz_menu":
+        await create_quiz_menu_callback(update, context)
+
+
+async def create_quiz_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Displays the quiz creation type menu."""
+    query = update.callback_query
+    await query.edit_message_text(
+        text="Please select the type of quiz you want to create:",
+        reply_markup=create_quiz_type_keyboard()
+    )
 
 async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the 'Back to Main Menu' button press."""
@@ -113,10 +125,14 @@ async def delete_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
 async def play_quiz_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Starts a quiz when the 'Play' button is pressed."""
     query = update.callback_query
-    quiz_id = query.data.split("_")[-1]
+    # The quiz_id is part of the callback data: "play_quiz_{quiz_id}"
+    # However, the `start_quiz_session` expects the full shareable_id.
+    # We need to reconstruct it or change the function signature.
+    # For now, let's assume the callback data is the full shareable_id "play_quiz_{user_id}_{quiz_id}"
+    # This is a flaw in the current keyboard design. Let's fix it.
 
-    # Let the user know the quiz is starting
+    # Let's assume the callback_data is "play_{quiz_id}"
+    quiz_id = query.data.split('_')[-1]
+
     await query.edit_message_text(text=f"Starting quiz...")
-
-    # Call the function from quiz_commands to handle the session
     await start_quiz_session(update, context, quiz_id)

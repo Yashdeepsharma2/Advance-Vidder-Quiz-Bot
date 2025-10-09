@@ -1,11 +1,12 @@
 # Powered by Viddertech
 
 import logging
+import asyncio
 from telegram import Update
 from telegram.ext import ContextTypes
 
 import config
-from .quiz_commands import send_question, end_quiz_session # Import the quiz flow functions
+from .quiz_commands import send_question, end_quiz_session, send_live_leaderboard
 
 logger = logging.getLogger(__name__)
 
@@ -17,33 +18,41 @@ def is_quiz_creator(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Checks if the user is the creator of the current quiz."""
     if not is_quiz_active(context):
         return False
-    # In a real bot, you'd also check for group admin privileges here.
+    # A pro bot should also check for group admin privileges. For now, just the creator.
     return user_id == context.chat_data['current_quiz'].get('creator_id')
 
 async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Stops the current poll and sends the next question."""
+    """Stops the current poll, shows the leaderboard, and sends the next question."""
     if not is_quiz_active(context) or not is_quiz_creator(update.effective_user.id, context):
-        await update.message.reply_text("There is no active quiz or you are not the creator.")
+        await update.message.reply_text("There is no active quiz for you to control.")
         return
 
     quiz_session = context.chat_data['current_quiz']
 
-    # Stop the current poll to show the results
+    # Stop the current poll to show the results to players
     if 'current_poll_id' in context.chat_data:
         try:
             await context.bot.stop_poll(update.effective_chat.id, context.chat_data['current_poll_id'])
         except Exception as e:
             logger.warning(f"Could not stop poll (it might have auto-closed): {e}")
 
+    # Give a moment for players to see the result before showing the leaderboard
+    await asyncio.sleep(2)
+
+    # Show the live leaderboard
+    await send_live_leaderboard(update.effective_chat.id, context)
+
+    # Give another moment before the next question
+    await asyncio.sleep(3)
+
     # Advance to the next question
     quiz_session['current_question_index'] += 1
     await send_question(update.effective_chat.id, context)
 
-
 async def pause_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Pauses the currently running quiz."""
     if not is_quiz_active(context) or not is_quiz_creator(update.effective_user.id, context):
-        await update.message.reply_text("There is no active quiz to pause or you are not the creator.")
+        await update.message.reply_text("There is no active quiz for you to control.")
         return
 
     quiz_session = context.chat_data['current_quiz']
@@ -57,7 +66,7 @@ async def pause_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Resumes a paused quiz."""
     if not is_quiz_active(context) or not is_quiz_creator(update.effective_user.id, context):
-        await update.message.reply_text("There is no active quiz to resume or you are not the creator.")
+        await update.message.reply_text("There is no active quiz for you to control.")
         return
 
     quiz_session = context.chat_data['current_quiz']
@@ -72,7 +81,7 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Stops the ongoing quiz completely and shows the final leaderboard."""
     if not is_quiz_active(context) or not is_quiz_creator(update.effective_user.id, context):
-        await update.message.reply_text("There is no active quiz to stop or you are not the creator.")
+        await update.message.reply_text("There is no active quiz for you to control.")
         return
 
     await end_quiz_session(update.effective_chat.id, context)
@@ -80,7 +89,7 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def _set_quiz_speed(update: Update, context: ContextTypes.DEFAULT_TYPE, speed: str, speed_value: int) -> None:
     """Helper function to set the speed of the quiz."""
     if not is_quiz_active(context) or not is_quiz_creator(update.effective_user.id, context):
-        await update.message.reply_text("There is no active quiz to change the speed of or you are not the creator.")
+        await update.message.reply_text("There is no active quiz for you to control.")
         return
 
     context.chat_data['current_quiz']['open_period'] = speed_value

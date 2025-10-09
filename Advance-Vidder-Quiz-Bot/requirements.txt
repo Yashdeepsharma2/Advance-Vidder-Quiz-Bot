@@ -6,6 +6,10 @@ python-dotenv
 # --- Integrations ---
 telethon
 openai
+pytesseract
+pdf2image
+requests
+beautifulsoup4
 
 # --- Database Drivers (optional but good practice) ---
 # For PostgreSQL
