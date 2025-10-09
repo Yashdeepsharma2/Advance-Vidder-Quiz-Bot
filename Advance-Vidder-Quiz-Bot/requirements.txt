@@ -1,0 +1,15 @@
+# --- Core Libraries ---
+python-telegram-bot[ext]
+sqlalchemy
+python-dotenv
+
+# --- Integrations ---
+telethon
+openai
+
+# --- Database Drivers (optional but good practice) ---
+# For PostgreSQL
+# psycopg2-binary
+
+# For MySQL
+# pymysql

@@ -1,4 +1,0 @@
-python-telegram-bot[ext]
-python-dotenv
-openai
-telethon
